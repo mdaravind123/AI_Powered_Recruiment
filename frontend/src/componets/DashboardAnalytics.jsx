@@ -12,9 +12,9 @@ export default function DashboardAnalytics() {
   const calculateAnalytics = async () => {
     try {
       const { data: jobs } = await axios.get("/api/jobs");
-
+       const recruiterJobs = jobs.filter(job => job.recruiterId === user._id);
       const result = await Promise.all(
-        jobs.map(async (job) => {
+        recruiterJobs.map(async (job) => {
           const { data: candidates } = await axios.get(
             `/api/jobs/${job._id}/candidates`
           );

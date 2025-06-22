@@ -6,12 +6,27 @@ const router = express.Router();
 
 
 router.post('/', async (req, res) => {
-  const job = await Job.create(req.body);
-  res.json(job);
+  try {
+    const { title, description, skills, recruiterId } = req.body;
+
+    const job = await Job.create({
+      title,
+      description,
+      skills,
+      recruiterId, 
+    });
+
+    res.json(job);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to create job' });
+  }
 });
 
 router.get('/', async (req, res) => {
-  const jobs = await Job.find();
+  const { recruiterId } = req.query;
+
+  const filter = recruiterId ? { recruiterId } : {};
+  const jobs = await Job.find(filter);
   res.json(jobs);
 });
 
