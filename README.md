@@ -162,7 +162,7 @@ backend/
 ---
 Architecture Diagram:
 
-![Alt text](./assets/logo.png)
+![Logo](./frontend/src/assets/logo.png)
 
 
 ## 🛡️ Roles
