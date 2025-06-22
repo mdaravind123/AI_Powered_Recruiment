@@ -160,6 +160,10 @@ backend/
 ```
 
 ---
+Architecture Diagram:
+
+![Alt text](./assets/logo.png)
+
 
 ## 🛡️ Roles
 
