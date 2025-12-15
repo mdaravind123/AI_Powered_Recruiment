@@ -5,6 +5,7 @@ import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import Jobs from "./pages/Jobs";
 import JobDetails from "./pages/JobDetails";
+import ApplyJob from "./pages/ApplyJob";
 import { useUserStore } from "./store/useUserStore";
 
 export default function App() {
@@ -28,7 +29,7 @@ export default function App() {
           to="/jobs"
           className="text-gray-700 hover:text-green-600 transition duration-200 hover:underline underline-offset-4"
         >
-          Jobs
+          {user.role === 'recruiter' ? 'Manage Jobs' : 'Find Jobs'}
         </Link>
       </>
     )}
@@ -58,7 +59,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/jobs" element={<Jobs />} />
-          <Route path="/jobs/:id" element={<JobDetails />} />
+          <Route path="/jobs/:id" element={user?.role === 'recruiter' ? <JobDetails /> : <ApplyJob />} />
         </Routes>
       </main>
     </div>

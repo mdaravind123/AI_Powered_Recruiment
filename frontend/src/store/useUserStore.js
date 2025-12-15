@@ -14,3 +14,5 @@ export const useUserStore = create(
     }
   )
 );
+
+// persist local storage store

@@ -4,6 +4,9 @@ import toast from "react-hot-toast";
 import { useUserStore } from "../store/useUserStore";
 import { useNavigate } from "react-router-dom";
 
+// API Base URL - use environment variable or fallback to localhost
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 export default function DashboardAnalytics() {
   const { user } = useUserStore();
   const [analytics, setAnalytics] = useState([]);
@@ -11,12 +14,12 @@ export default function DashboardAnalytics() {
 
   const calculateAnalytics = async () => {
     try {
-      const { data: jobs } = await axios.get("/api/jobs");
+      const { data: jobs } = await axios.get(`${API_BASE_URL}/api/jobs`);
        const recruiterJobs = jobs.filter(job => job.recruiterId === user._id);
       const result = await Promise.all(
         recruiterJobs.map(async (job) => {
           const { data: candidates } = await axios.get(
-            `/api/jobs/${job._id}/candidates`
+            `${API_BASE_URL}/api/jobs/${job._id}/candidates`
           );
 
           const totalCandidates = candidates.length;

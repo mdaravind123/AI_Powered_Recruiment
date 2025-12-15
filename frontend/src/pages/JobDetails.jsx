@@ -59,6 +59,7 @@ export default function JobDetails() {
       formData.append("email", email);
       await axios.post(`/api/jobs/${id}/upload`, formData);
       toast.success("Resume uploaded successfully");
+      
       fetchCandidates();
     } catch (err) {
       toast.error(err.response?.data?.message || "Upload failed");

@@ -5,6 +5,9 @@ import toast from 'react-hot-toast';
 import {useUserStore} from '../store/useUserStore';
 import SkillBadgeList from '../componets/SkillBadgeList';
 
+// API Base URL - use environment variable or fallback to localhost
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 export default function Jobs() {
   const [jobs, setJobs] = useState([]);
   const [title, setTitle] = useState('');
@@ -15,7 +18,7 @@ export default function Jobs() {
   const handlePostJob = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('/api/jobs', {
+      await axios.post(`${API_BASE_URL}/api/jobs`, {
         title,
         description,
         skills: skills.split(',').map(s => s.trim()),
