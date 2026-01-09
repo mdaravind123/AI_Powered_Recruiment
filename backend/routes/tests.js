@@ -11,6 +11,15 @@ router.post('/', async (req, res) => {
   try {
     const { jobId, recruiterId, testName, description, duration, totalQuestions, questions, passingScore, proctoring, scheduledDate, scheduledTime } = req.body;
 
+    // Combine scheduledDate and scheduledTime into scheduledStartDateTime
+    let scheduledStartDateTime = null;
+    if (scheduledDate && scheduledTime) {
+      const dateObj = new Date(scheduledDate);
+      const [hours, minutes] = scheduledTime.split(':');
+      dateObj.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+      scheduledStartDateTime = dateObj;
+    }
+
     const test = await Test.create({
       jobId,
       recruiterId,
@@ -22,7 +31,8 @@ router.post('/', async (req, res) => {
       passingScore,
       proctoring,
       scheduledDate,
-      scheduledTime
+      scheduledTime,
+      scheduledStartDateTime
     });
 
     res.json(test);
@@ -54,7 +64,22 @@ router.get('/:testId', async (req, res) => {
     if (!test) {
       return res.status(404).json({ message: 'Test not found' });
     }
-    res.json(test);
+
+    // Check if test has a scheduled start time
+    const now = new Date();
+    let isAvailable = true;
+    let availableAt = null;
+
+    if (test.scheduledStartDateTime) {
+      isAvailable = now >= test.scheduledStartDateTime;
+      availableAt = test.scheduledStartDateTime;
+    }
+
+    res.json({
+      ...test.toObject(),
+      isAvailable,
+      availableAt
+    });
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch test' });
   }
@@ -86,6 +111,17 @@ router.post('/:testId/submit', async (req, res) => {
     const test = await Test.findById(testId);
     if (!test) {
       return res.status(404).json({ message: 'Test not found' });
+    }
+
+    // Server-side validation: Check if test can be started based on scheduled time
+    if (test.scheduledStartDateTime) {
+      const now = new Date();
+      if (now < test.scheduledStartDateTime) {
+        return res.status(403).json({ 
+          message: 'Test cannot be submitted before the scheduled start time',
+          availableAt: test.scheduledStartDateTime
+        });
+      }
     }
 
     const passed = totalScore >= test.passingScore;

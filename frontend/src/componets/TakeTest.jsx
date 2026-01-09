@@ -18,10 +18,40 @@ export default function TakeTest({ testId, jobId, applicationId, onCompleted }) 
   const [finishedResult, setFinishedResult] = useState(null);
   const containerRef = useRef(null);
   const proctorListenersRef = useRef(null);
+  const [isTestAvailable, setIsTestAvailable] = useState(true);
+  const [testAvailableAt, setTestAvailableAt] = useState(null);
+  const [timeUntilStart, setTimeUntilStart] = useState('');
 
   useEffect(() => {
     fetchTest();
   }, [testId]);
+
+  // Check test availability periodically
+  useEffect(() => {
+    if (!testAvailableAt || isTestAvailable) return;
+
+    const updateCountdown = () => {
+      const now = new Date();
+      const diff = testAvailableAt - now;
+      
+      if (diff <= 0) {
+        setIsTestAvailable(true);
+        setTimeUntilStart('');
+        return;
+      }
+      
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      
+      setTimeUntilStart(`${hours}h ${minutes}m ${seconds}s`);
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    
+    return () => clearInterval(interval);
+  }, [testAvailableAt, isTestAvailable]);
 
   // Persistent test state key
   const storageKey = `testState:${user?._id}:${testId || applicationId}`;
@@ -104,6 +134,13 @@ export default function TakeTest({ testId, jobId, applicationId, onCompleted }) 
 
       const { data } = await axios.get(`/api/tests/${testId}`);
       setTest(data);
+      
+      // Check test availability
+      setIsTestAvailable(data.isAvailable !== false);
+      if (data.availableAt) {
+        setTestAvailableAt(new Date(data.availableAt));
+      }
+      
       // restore persisted state if available
       const raw = localStorage.getItem(storageKey);
       if (raw) {
@@ -335,7 +372,12 @@ export default function TakeTest({ testId, jobId, applicationId, onCompleted }) 
       } catch (e) {}
     } catch (err) {
       console.error(err);
-      toast.error('Failed to submit test');
+      if (err.response?.status === 403) {
+        toast.error(err.response?.data?.message || 'Test cannot be submitted before the scheduled start time');
+        submittedRef.current = false; // Allow retry
+      } else {
+        toast.error('Failed to submit test');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -355,6 +397,9 @@ export default function TakeTest({ testId, jobId, applicationId, onCompleted }) 
             <p><strong>Duration:</strong> {test.duration} minutes</p>
             <p><strong>Total Questions:</strong> {test.questions.length}</p>
             <p><strong>Passing Score:</strong> {test.passingScore}%</p>
+            {testAvailableAt && (
+              <p><strong>Scheduled Start Time:</strong> {testAvailableAt.toLocaleString()}</p>
+            )}
             {test.proctoring?.enableProctoring && (
               <div>
                 <p><strong>Proctoring Rules:</strong></p>
@@ -367,8 +412,28 @@ export default function TakeTest({ testId, jobId, applicationId, onCompleted }) 
             )}
           </div>
 
+          {!isTestAvailable ? (
+            <div className="bg-yellow-50 border border-yellow-300 rounded p-4 mb-4">
+              <p className="text-yellow-800 font-semibold mb-2">
+                ⏰ This test is not yet available
+              </p>
+              <p className="text-yellow-700">
+                This test will be available at: <strong>{testAvailableAt?.toLocaleString()}</strong>
+              </p>
+              {timeUntilStart && (
+                <p className="text-yellow-700 mt-2">
+                  Time until start: <strong className="text-lg">{timeUntilStart}</strong>
+                </p>
+              )}
+            </div>
+          ) : null}
+
           <button
             onClick={async () => {
+              if (!isTestAvailable) {
+                toast.error('Test is not available yet. Please wait until the scheduled start time.');
+                return;
+              }
               // request fullscreen then start
               try {
                 if (containerRef.current && containerRef.current.requestFullscreen) {
@@ -381,9 +446,14 @@ export default function TakeTest({ testId, jobId, applicationId, onCompleted }) 
               }
               setTestStarted(true);
             }}
-            className="w-full bg-green-600 text-white py-3 rounded hover:bg-green-700 font-semibold text-lg"
+            disabled={!isTestAvailable}
+            className={`w-full py-3 rounded font-semibold text-lg ${
+              isTestAvailable
+                ? 'bg-green-600 text-white hover:bg-green-700 cursor-pointer'
+                : 'bg-gray-400 text-gray-200 cursor-not-allowed'
+            }`}
           >
-            Start Test (Full Screen)
+            {isTestAvailable ? 'Start Test (Full Screen)' : 'Test Not Available Yet'}
           </button>
         </div>
       </div>

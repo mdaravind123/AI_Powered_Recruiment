@@ -60,6 +60,16 @@ export default function CreateTest({ jobId, onTestCreated, onCancel }) {
       toast.error('Test name is required');
       return false;
     }
+    if (!scheduledDate || !scheduledTime) {
+      toast.error('Please set a scheduled start date and time for the test');
+      return false;
+    }
+    // Validate that scheduled time is not in the past
+    const scheduledDateTime = new Date(`${scheduledDate}T${scheduledTime}`);
+    if (scheduledDateTime < new Date()) {
+      toast.error('Scheduled start time cannot be in the past');
+      return false;
+    }
     if (questions.length === 0) {
       toast.error('At least one question is required');
       return false;
@@ -169,16 +179,17 @@ export default function CreateTest({ jobId, onTestCreated, onCancel }) {
               />
             </div>
             <div>
-              <label className="block font-semibold mb-2">Scheduled Date</label>
+              <label className="block font-semibold mb-2">Scheduled Start Date *</label>
               <input
                 type="date"
                 value={scheduledDate}
                 onChange={(e) => setScheduledDate(e.target.value)}
                 className="w-full border rounded px-3 py-2"
+                min={new Date().toISOString().split('T')[0]}
               />
             </div>
             <div>
-              <label className="block font-semibold mb-2">Scheduled Time</label>
+              <label className="block font-semibold mb-2">Scheduled Start Time *</label>
               <input
                 type="time"
                 value={scheduledTime}
@@ -187,6 +198,12 @@ export default function CreateTest({ jobId, onTestCreated, onCancel }) {
               />
             </div>
           </div>
+
+          {scheduledDate && scheduledTime && (
+            <div className="text-sm text-blue-600 bg-blue-50 p-3 rounded">
+              <strong>Test will be available at:</strong> {new Date(`${scheduledDate}T${scheduledTime}`).toLocaleString()}
+            </div>
+          )}
 
           {/* Proctoring Settings */}
           <div className="border-t pt-4">

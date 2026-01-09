@@ -32,6 +32,7 @@ const testSchema = new mongoose.Schema({
   },
   scheduledDate: Date,
   scheduledTime: String, // HH:MM format
+  scheduledStartDateTime: Date, // Combined scheduled start date and time
   isActive: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
