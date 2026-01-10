@@ -3,9 +3,18 @@ import mongoose from 'mongoose';
 const answerSchema = new mongoose.Schema({
   questionId: String,
   questionText: String,
+  questionType: { type: String, enum: ['mcq', 'coding', 'essay'] },
+  // For MCQ & essay
   userAnswer: String,
   correctAnswer: String,
   isCorrect: Boolean,
+  // For coding
+  language: String,
+  code: String,
+  passedCases: Number,
+  totalCases: Number,
+  stderr: String,
+  outputs: [String],
   timeSpent: Number // in seconds
 }, { _id: false });
 

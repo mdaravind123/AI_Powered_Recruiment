@@ -1,10 +1,20 @@
 import mongoose from 'mongoose';
 
+const testCaseSchema = new mongoose.Schema({
+  input: { type: String, default: '' },
+  expectedOutput: { type: String, default: '' },
+  isSample: { type: Boolean, default: false }
+}, { _id: false });
+
 const questionSchema = new mongoose.Schema({
   questionText: String,
   questionType: { type: String, enum: ['mcq', 'coding', 'essay'], default: 'mcq' },
   options: [String], // for MCQ
   correctAnswer: String,
+  // Coding-specific settings
+  testCases: [testCaseSchema],
+  allowedLanguages: [{ type: String, enum: ['python', 'javascript', 'java', 'cpp'] }],
+  defaultLanguage: { type: String, enum: ['python', 'javascript', 'java', 'cpp'] },
   timeLimit: { type: Number, default: 5 }, // in minutes
   difficulty: { type: String, enum: ['easy', 'medium', 'hard'], default: 'medium' }
 }, { _id: false });

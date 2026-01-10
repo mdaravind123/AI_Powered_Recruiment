@@ -3,6 +3,7 @@ import Test from '../models/Test.js';
 import TestResult from '../models/TestResult.js';
 import Application from '../models/Application.js';
 import mongoose from 'mongoose';
+import { runAgainstTestCases } from '../utils/codeRunner.js';
 
 const router = express.Router();
 
@@ -75,8 +76,32 @@ router.get('/:testId', async (req, res) => {
       availableAt = test.scheduledStartDateTime;
     }
 
+    // Sanitize questions for candidate view
+    const raw = test.toObject();
+    const sanitizedQuestions = (raw.questions || []).map(q => {
+      const base = {
+        questionText: q.questionText,
+        questionType: q.questionType,
+        options: q.options || [],
+        timeLimit: q.timeLimit,
+        difficulty: q.difficulty
+      };
+      if (q.questionType === 'coding') {
+        const sample = (q.testCases || []).filter(tc => tc.isSample).map(tc => ({ input: tc.input, expectedOutput: tc.expectedOutput }));
+        return {
+          ...base,
+          sampleTestCases: sample,
+          allowedLanguages: q.allowedLanguages?.length ? q.allowedLanguages : ['python', 'javascript', 'java', 'cpp'],
+          defaultLanguage: q.defaultLanguage || 'python'
+        };
+      }
+      // Do NOT expose correctAnswer for MCQ/essay in candidate view
+      return base;
+    });
+
     res.json({
-      ...test.toObject(),
+      ...raw,
+      questions: sanitizedQuestions,
       isAvailable,
       availableAt
     });
@@ -106,7 +131,7 @@ router.post('/:testId/submit', async (req, res) => {
     if (!testId || !mongoose.Types.ObjectId.isValid(testId)) {
       return res.status(400).json({ message: 'Invalid test id' });
     }
-    const { candidateId, candidateName, candidateEmail, jobId, answers, totalScore, correctAnswers, totalQuestions, timeUsed } = req.body;
+    const { candidateId, candidateName, candidateEmail, jobId, answers, timeUsed } = req.body;
 
     const test = await Test.findById(testId);
     if (!test) {
@@ -124,7 +149,76 @@ router.post('/:testId/submit', async (req, res) => {
       }
     }
 
-    const passed = totalScore >= test.passingScore;
+    // Recalculate score server-side (secure), evaluating coding questions using hidden test cases
+    let secureCorrectCount = 0;
+    let secureTotalQuestions = test.questions.length;
+    let calculatedScoreAccum = 0; // sum of per-question score fraction
+
+    const resultAnswers = [];
+
+    for (let idx = 0; idx < test.questions.length; idx++) {
+      const q = test.questions[idx];
+      const clientAnswer = Array.isArray(answers) ? answers[idx] : null;
+      const baseAnswer = {
+        questionId: String(idx),
+        questionText: q.questionText,
+        questionType: q.questionType,
+        timeSpent: (clientAnswer && clientAnswer.timeSpent) || 0
+      };
+
+      if (q.questionType === 'mcq') {
+        const userAns = clientAnswer?.userAnswer ?? '';
+        const isCorrect = !!q.correctAnswer && userAns === q.correctAnswer;
+        if (isCorrect) secureCorrectCount += 1;
+        calculatedScoreAccum += isCorrect ? 1 : 0;
+        resultAnswers.push({
+          ...baseAnswer,
+          userAnswer: userAns,
+          correctAnswer: undefined,
+          isCorrect
+        });
+      } else if (q.questionType === 'coding') {
+        const language = clientAnswer?.language || q.defaultLanguage || 'python';
+        const code = clientAnswer?.code || clientAnswer?.userAnswer || '';
+        const hiddenCases = (q.testCases || []).map(tc => ({ input: tc.input ?? '', expectedOutput: tc.expectedOutput ?? '' }));
+        let passedCases = 0;
+        let outputs = [];
+        let stderrCombined = '';
+        try {
+          const results = await runAgainstTestCases({ language, code, testCases: hiddenCases });
+          results.forEach(r => {
+            outputs.push(r.stdout);
+            if (r.passed) passedCases += 1;
+            if (r.stderr) stderrCombined = (stderrCombined ? (stderrCombined + '\n') : '') + r.stderr;
+          });
+        } catch (e) {
+          stderrCombined = e.message || 'Execution error';
+        }
+        const totalCases = hiddenCases.length || 1;
+        const fraction = totalCases ? (passedCases / totalCases) : 0;
+        calculatedScoreAccum += fraction;
+        resultAnswers.push({
+          ...baseAnswer,
+          language,
+          code,
+          passedCases,
+          totalCases,
+          stderr: stderrCombined,
+          outputs,
+          isCorrect: fraction === 1
+        });
+      } else {
+        // essay: currently not auto-graded
+        resultAnswers.push({
+          ...baseAnswer,
+          userAnswer: clientAnswer?.userAnswer ?? clientAnswer ?? '',
+          isCorrect: false
+        });
+      }
+    }
+
+    const secureTotalScore = Math.round((calculatedScoreAccum / secureTotalQuestions) * 100);
+    const passed = secureTotalScore >= test.passingScore;
 
     console.log('Creating TestResult for testId=', testId, 'candidate=', candidateId);
     const testObjIdForResult = new mongoose.Types.ObjectId(testId);
@@ -146,10 +240,10 @@ router.post('/:testId/submit', async (req, res) => {
       candidateId: candObjIdForResult,
       candidateName,
       candidateEmail,
-      answers,
-      totalScore,
-      correctAnswers,
-      totalQuestions,
+      answers: resultAnswers,
+      totalScore: secureTotalScore,
+      correctAnswers: secureCorrectCount,
+      totalQuestions: secureTotalQuestions,
       status: 'completed',
       passed,
       timeUsed,
@@ -227,7 +321,7 @@ router.post('/:testId/submit', async (req, res) => {
       console.warn('Failed to update application test status:', uErr.message);
     }
 
-    res.json({ success: true, result, passed, appUpdated: !!app });
+    res.json({ success: true, result, score: secureTotalScore, passed, appUpdated: !!app });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Failed to submit test result', error: err.message });

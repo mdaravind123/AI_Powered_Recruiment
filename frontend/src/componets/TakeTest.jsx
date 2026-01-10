@@ -16,6 +16,8 @@ export default function TakeTest({ testId, jobId, applicationId, onCompleted }) 
   const [testStarted, setTestStarted] = useState(false);
   const [timeSpent, setTimeSpent] = useState({});
   const [finishedResult, setFinishedResult] = useState(null);
+  const [langByQuestion, setLangByQuestion] = useState({});
+  const [runResults, setRunResults] = useState({});
   const containerRef = useRef(null);
   const proctorListenersRef = useRef(null);
   const [isTestAvailable, setIsTestAvailable] = useState(true);
@@ -186,6 +188,36 @@ export default function TakeTest({ testId, jobId, applicationId, onCompleted }) 
     });
   };
 
+  const setLanguageForCurrent = (lang) => {
+    setLangByQuestion(prev => ({ ...prev, [currentQuestion]: lang }));
+  };
+
+  const handleRunCode = async () => {
+    try {
+      const q = test.questions[currentQuestion];
+      const code = answers[currentQuestion] || '';
+      const language = langByQuestion[currentQuestion] || q.defaultLanguage || 'python';
+      const sampleCases = q.sampleTestCases || [];
+      if (!code.trim()) {
+        toast.error('Please write some code first');
+        return;
+      }
+      if (!sampleCases.length) {
+        toast('No sample test cases configured', { icon: 'ℹ️' });
+        return;
+      }
+      const { data } = await axios.post('/api/code/execute', {
+        language,
+        code,
+        testCases: sampleCases
+      });
+      setRunResults(prev => ({ ...prev, [currentQuestion]: data.results }));
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to run code');
+    }
+  };
+
   const handleNextQuestion = () => {
     if (currentQuestion < test.questions.length - 1) {
       setCurrentQuestion(currentQuestion + 1);
@@ -336,14 +368,27 @@ export default function TakeTest({ testId, jobId, applicationId, onCompleted }) 
       const totalScore = calculateScore();
       const totalTimeUsed = Object.values(timeSpent).reduce((a, b) => a + b, 0);
 
-      const resultAnswers = test.questions.map((q, idx) => ({
-        questionId: idx,
-        questionText: q.questionText,
-        userAnswer: answers[idx] || 'Not answered',
-        correctAnswer: q.correctAnswer,
-        isCorrect: q.questionType === 'mcq' && answers[idx] === q.correctAnswer,
-        timeSpent: timeSpent[idx] || 0
-      }));
+      const resultAnswers = test.questions.map((q, idx) => {
+        const base = {
+          questionId: idx,
+          questionText: q.questionText,
+          questionType: q.questionType,
+          timeSpent: timeSpent[idx] || 0
+        };
+        if (q.questionType === 'coding') {
+          return {
+            ...base,
+            language: langByQuestion[idx] || q.defaultLanguage || 'python',
+            code: answers[idx] || ''
+          };
+        }
+        return {
+          ...base,
+          userAnswer: answers[idx] || 'Not answered',
+          correctAnswer: q.correctAnswer,
+          isCorrect: q.questionType === 'mcq' && answers[idx] === q.correctAnswer
+        };
+      });
 
       const resp = await axios.post(`/api/tests/${testId}/submit`, {
         candidateId: user._id,
@@ -357,7 +402,8 @@ export default function TakeTest({ testId, jobId, applicationId, onCompleted }) 
         timeUsed: totalTimeUsed
       });
 
-      toast.success(`Test submitted! Your score: ${totalScore}%`);
+      const secureScore = resp.data?.score ?? totalScore;
+      toast.success(`Test submitted! Your score: ${secureScore}%`);
       // clear persisted state
       try { localStorage.removeItem(storageKey); } catch(e){}
 
@@ -544,12 +590,43 @@ export default function TakeTest({ testId, jobId, applicationId, onCompleted }) 
           )}
 
           {question.questionType === 'coding' && (
-            <textarea
-              value={answers[currentQuestion] || ''}
-              onChange={(e) => handleAnswerChange(e.target.value)}
-              className="w-full border rounded p-4 h-64 font-mono text-sm bg-gray-800"
-              placeholder="Write your code here..."
-            />
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <label className="text-sm">Language:</label>
+                <select
+                  value={langByQuestion[currentQuestion] || question.defaultLanguage || 'python'}
+                  onChange={(e) => setLanguageForCurrent(e.target.value)}
+                  className="border rounded px-2 py-1 bg-gray-700 text-white"
+                >
+                  {(question.allowedLanguages?.length ? question.allowedLanguages : ['python','javascript','java','cpp']).map(lang => (
+                    <option key={lang} value={lang}>{lang}</option>
+                  ))}
+                </select>
+                <button onClick={handleRunCode} className="px-3 py-1 bg-blue-600 rounded hover:bg-blue-700">Run</button>
+              </div>
+              <textarea
+                value={answers[currentQuestion] || ''}
+                onChange={(e) => handleAnswerChange(e.target.value)}
+                className="w-full border rounded p-4 h-64 font-mono text-sm bg-gray-800"
+                placeholder="Write your code here..."
+              />
+              {Array.isArray(runResults[currentQuestion]) && (
+                <div className="bg-black/40 p-4 rounded">
+                  <h4 className="font-semibold mb-2">Run Results (Sample Cases)</h4>
+                  <div className="space-y-2">
+                    {runResults[currentQuestion].map((r, idx) => (
+                      <div key={idx} className={`p-2 rounded ${r.passed ? 'bg-green-900/40' : 'bg-red-900/30'}`}>
+                        <div className="text-sm text-gray-300">Case {idx+1}</div>
+                        <div className="text-sm"><span className="font-semibold">Input:</span> <pre className="inline whitespace-pre-wrap">{r.input}</pre></div>
+                        <div className="text-sm"><span className="font-semibold">Expected:</span> <pre className="inline whitespace-pre-wrap">{r.expectedOutput}</pre></div>
+                        <div className="text-sm"><span className="font-semibold">Output:</span> <pre className="inline whitespace-pre-wrap">{r.stdout}</pre></div>
+                        {r.stderr ? (<div className="text-sm text-red-300"><span className="font-semibold">Error:</span> <pre className="inline whitespace-pre-wrap">{r.stderr}</pre></div>) : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {/* Navigation */}

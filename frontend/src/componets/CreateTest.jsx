@@ -83,6 +83,19 @@ export default function CreateTest({ jobId, onTestCreated, onCancel }) {
         toast.error('MCQ questions must have all options and correct answer');
         return false;
       }
+      if (q.questionType === 'coding') {
+        const cases = q.testCases || [];
+        if (!cases.length) {
+          toast.error('Coding questions must have at least one test case');
+          return false;
+        }
+        for (const tc of cases) {
+          if ((tc.input ?? '') === '' || (tc.expectedOutput ?? '') === '') {
+            toast.error('All coding test cases must have input and expected output');
+            return false;
+          }
+        }
+      }
     }
     return true;
   };
@@ -332,6 +345,114 @@ export default function CreateTest({ jobId, onTestCreated, onCancel }) {
                           />
                         </div>
                       ))}
+                    </div>
+                  )}
+
+                  {q.questionType === 'coding' && (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-sm font-semibold mb-1">Allowed Languages</label>
+                          <div className="flex flex-wrap gap-2">
+                            {['python','javascript','java','cpp'].map(lang => {
+                              const allowed = q.allowedLanguages || [];
+                              const checked = allowed.includes(lang);
+                              return (
+                                <label key={lang} className="flex items-center gap-1 text-sm">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) => {
+                                      const next = new Set(allowed);
+                                      if (e.target.checked) next.add(lang); else next.delete(lang);
+                                      const arr = Array.from(next);
+                                      handleQuestionChange(qIdx, 'allowedLanguages', arr);
+                                      if (!arr.includes(q.defaultLanguage)) handleQuestionChange(qIdx, 'defaultLanguage', arr[0] || 'python');
+                                    }}
+                                  />
+                                  <span>{lang}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold mb-1">Default Language</label>
+                          <select
+                            value={q.defaultLanguage || 'python'}
+                            onChange={(e) => handleQuestionChange(qIdx, 'defaultLanguage', e.target.value)}
+                            className="border rounded px-2 py-1 text-sm"
+                          >
+                            {(q.allowedLanguages?.length ? q.allowedLanguages : ['python','javascript','java','cpp']).map(lang => (
+                              <option key={lang} value={lang}>{lang}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-semibold mb-2">Test Cases</label>
+                        <div className="space-y-2">
+                          {(q.testCases || []).map((tc, tcIdx) => (
+                            <div key={tcIdx} className="grid grid-cols-3 gap-2 items-start">
+                              <textarea
+                                value={tc.input || ''}
+                                onChange={(e) => {
+                                  const next = [...(q.testCases || [])];
+                                  next[tcIdx] = { ...next[tcIdx], input: e.target.value };
+                                  handleQuestionChange(qIdx, 'testCases', next);
+                                }}
+                                className="border rounded px-2 py-1 text-sm col-span-1"
+                                placeholder="Input"
+                                rows={3}
+                              />
+                              <textarea
+                                value={tc.expectedOutput || ''}
+                                onChange={(e) => {
+                                  const next = [...(q.testCases || [])];
+                                  next[tcIdx] = { ...next[tcIdx], expectedOutput: e.target.value };
+                                  handleQuestionChange(qIdx, 'testCases', next);
+                                }}
+                                className="border rounded px-2 py-1 text-sm col-span-1"
+                                placeholder="Expected Output"
+                                rows={3}
+                              />
+                              <div className="flex items-center gap-2 col-span-1">
+                                <label className="flex items-center gap-1 text-sm">
+                                  <input
+                                    type="checkbox"
+                                    checked={!!tc.isSample}
+                                    onChange={(e) => {
+                                      const next = [...(q.testCases || [])];
+                                      next[tcIdx] = { ...next[tcIdx], isSample: e.target.checked };
+                                      handleQuestionChange(qIdx, 'testCases', next);
+                                    }}
+                                  />
+                                  <span>Sample (visible to candidate)</span>
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const next = [...(q.testCases || [])];
+                                    next.splice(tcIdx, 1);
+                                    handleQuestionChange(qIdx, 'testCases', next);
+                                  }}
+                                  className="bg-red-500 text-white px-2 py-1 rounded text-sm"
+                                >Remove</button>
+                              </div>
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = [...(q.testCases || [])];
+                              next.push({ input: '', expectedOutput: '', isSample: false });
+                              handleQuestionChange(qIdx, 'testCases', next);
+                            }}
+                            className="text-green-600 font-semibold text-sm"
+                          >+ Add Test Case</button>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
