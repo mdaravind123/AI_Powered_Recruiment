@@ -1,19 +1,50 @@
 import nodemailer from 'nodemailer';
 
 // Configure nodemailer transporter
-// Note: Update these with your actual email credentials
 const transporter = nodemailer.createTransport({
-  service: 'gmail', // or your email service
+  service: 'gmail',
   auth: {
-    user: process.env.EMAIL_USER || 'your-email@gmail.com',
-    pass: process.env.EMAIL_PASSWORD || 'your-app-password'
+    user: process.env.EMAIL_USER || process.env.COMPANY_EMAIL,
+    pass: process.env.EMAIL_PASSWORD || process.env.EMAIL_APP_PASSWORD
   }
 });
+
+// Test email configuration on startup (optional)
+if (process.env.EMAIL_USER && process.env.EMAIL_PASSWORD) {
+  transporter.verify((error, success) => {
+    if (error) {
+      console.warn('⚠️  Email service not configured:', error.message);
+      console.warn('   Interview notifications will not be sent.');
+      console.warn('   To enable, set EMAIL_USER and EMAIL_PASSWORD in .env');
+    } else {
+      console.log('✅ Email service ready to send notifications');
+    }
+  });
+} else {
+  console.warn('⚠️  Email credentials not found in .env');
+  console.warn('   Set EMAIL_USER and EMAIL_PASSWORD to enable interview notifications');
+}
 
 /**
  * Send interview scheduled email to candidate
  */
 export const sendInterviewScheduledEmail = async (interviewDetails) => {
+  console.log('\n📧 ========== EMAIL SERVICE CALLED ==========');
+  console.log('EMAIL_USER:', process.env.EMAIL_USER ? '✓ Set' : '✗ NOT SET');
+  console.log('EMAIL_PASSWORD:', process.env.EMAIL_PASSWORD ? '✓ Set' : '✗ NOT SET');
+  console.log('Recipient:', interviewDetails.candidateEmail);
+  
+  // Check if email is configured
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+    console.log('❌ Email not configured - skipping interview notification');
+    console.log('   Candidate:', interviewDetails.candidateEmail);
+    console.log('   Interview Date:', interviewDetails.interviewDate, interviewDetails.interviewTime);
+    console.log('===========================================\n');
+    return { success: false, message: 'Email service not configured' };
+  }
+
+  console.log('✓ Email credentials found, proceeding to send...');
+  
   try {
     const {
       candidateEmail,
@@ -107,18 +138,29 @@ export const sendInterviewScheduledEmail = async (interviewDetails) => {
     `;
 
     const mailOptions = {
-      from: process.env.EMAIL_USER || 'noreply@airecruiter.com',
+      from: `${process.env.COMPANY_NAME || 'AI Recruiter'} <${process.env.EMAIL_USER}>`,
       to: candidateEmail,
-      subject: `Interview Scheduled - ${jobTitle} at ${companyName}`,
+      subject: `📅 Interview Scheduled - ${jobTitle} at ${companyName}`,
       html: htmlContent
     };
 
-    await transporter.sendMail(mailOptions);
-    console.log(`Interview email sent to ${candidateEmail}`);
-    return true;
+    console.log('📨 Sending email with options:');
+    console.log('   From:', mailOptions.from);
+    console.log('   To:', mailOptions.to);
+    console.log('   Subject:', mailOptions.subject);
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ Interview email sent successfully!`);
+    console.log(`   To: ${candidateEmail}`);
+    console.log(`   Message ID: ${info.messageId}`);
+    console.log('===========================================\n');
+    return { success: true, messageId: info.messageId };
   } catch (err) {
-    console.error('Error sending interview email:', err);
-    throw err;
+    console.error('❌ Error sending interview email:', err.message);
+    console.error('   To:', interviewDetails.candidateEmail);
+    console.error('   Full error:', err);
+    console.log('===========================================\n');
+    return { success: false, error: err.message };
   }
 };
 

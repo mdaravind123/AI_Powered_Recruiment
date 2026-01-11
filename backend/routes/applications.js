@@ -2,6 +2,8 @@ import express from 'express';
 import Application from '../models/Application.js';
 import Test from '../models/Test.js';
 import TestResult from '../models/TestResult.js';
+import { processResumeFromUrl } from '../utils/resumeExtractor.js';
+import axios from 'axios';
 
 const router = express.Router();
 
@@ -16,14 +18,64 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'Already applied for this job' });
     }
 
+    // If resumeAnalysis is not provided or incomplete, try to extract from resumeUrl
+    let finalAnalysis = resumeAnalysis;
+    // Normalize provided analysis skills (trim, dedupe)
+    if (finalAnalysis && Array.isArray(finalAnalysis.skills)) {
+      finalAnalysis.skills = Array.from(
+        new Set(
+          finalAnalysis.skills
+            .filter(s => typeof s === 'string')
+            .map(s => s.trim())
+            .filter(Boolean)
+        )
+      );
+    }
+
+    if (!finalAnalysis || !finalAnalysis.skills || finalAnalysis.skills.length === 0) {
+      try {
+        // Attempt to extract and analyze resume if it's a Cloudinary URL
+        if (resumeUrl && resumeUrl.includes('cloudinary')) {
+          // Infer MIME type from file extension
+          let inferredMime = 'application/pdf';
+          const lowerUrl = resumeUrl.toLowerCase();
+          if (lowerUrl.endsWith('.pdf')) inferredMime = 'application/pdf';
+          else if (lowerUrl.endsWith('.docx')) inferredMime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+          else if (lowerUrl.endsWith('.doc')) inferredMime = 'application/msword';
+          else if (lowerUrl.endsWith('.txt')) inferredMime = 'text/plain';
+
+          const extracted = await processResumeFromUrl(resumeUrl, inferredMime);
+          const skills = Array.isArray(extracted.skills)
+            ? Array.from(new Set(extracted.skills.filter(s => typeof s === 'string').map(s => s.trim()).filter(Boolean)))
+            : [];
+          finalAnalysis = {
+            summary: extracted.summary,
+            skills,
+            experience: `${extracted.experience}+ years`,
+            education: extracted.education,
+            email: extracted.email,
+            phone: extracted.phone
+          };
+        }
+      } catch (err) {
+        console.warn('Resume extraction on application submit failed:', err.message);
+        // Use provided analysis or defaults
+        finalAnalysis = resumeAnalysis || {
+          summary: 'Resume provided',
+          skills: [],
+          experience: '0+ years'
+        };
+      }
+    }
+
     const application = await Application.create({
       jobId,
       candidateId,
       candidateName,
       candidateEmail,
       resumeUrl,
-      matchScore,
-      resumeAnalysis,
+      matchScore: matchScore || 0,
+      resumeAnalysis: finalAnalysis,
       status: 'applied'
     });
 

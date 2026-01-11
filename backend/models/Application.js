@@ -40,7 +40,11 @@ const applicationSchema = new mongoose.Schema({
   resumeAnalysis: {
     summary: String,
     skills: [String],
-    experience: String
+    experience: String,
+    education: [String],
+    workExperience: [String],
+    email: String,
+    phone: String
   },
   interviewScheduled: {
   interviewId: {

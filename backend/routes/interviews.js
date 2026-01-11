@@ -89,8 +89,10 @@ router.post('/', async (req, res) => {
     );
 
     // Send email notification to candidate
+    console.log('\n🔔 Attempting to send email notification...');
+    let emailStatus = { sent: false, error: null };
     try {
-      await sendInterviewScheduledEmail({
+      const emailResult = await sendInterviewScheduledEmail({
         candidateEmail,
         candidateName,
         recruiterName,
@@ -103,13 +105,23 @@ router.post('/', async (req, res) => {
         location: interviewType === 'offline' ? location : null,
         additionalNotes
       });
+      
+      emailStatus.sent = emailResult.success;
+      if (!emailResult.success) {
+        emailStatus.error = emailResult.message || emailResult.error;
+        console.log('⚠️  Interview scheduled but email notification failed:', emailStatus.error);
+      } else {
+        console.log('✅ Email notification sent successfully');
+      }
     } catch (emailErr) {
-      console.log('Email notification failed (non-critical):', emailErr.message);
+      emailStatus.error = emailErr.message;
+      console.log('⚠️  Email notification failed (non-critical):', emailErr.message);
     }
 
     res.status(201).json({
       message: 'Interview scheduled successfully',
-      interview
+      interview,
+      emailNotification: emailStatus
     });
   } catch (err) {
     console.error('Error scheduling interview:', err);

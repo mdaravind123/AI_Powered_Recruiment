@@ -12,6 +12,8 @@ import codeRoutes from './routes/code.js';
 import applicationRoutes from './routes/applications.js';
 import messageRoutes from './routes/messages.js';
 import interviewRoutes from './routes/interviews.js';
+import resumeRoutes from './routes/resumes.js';
+import testEmailRoutes from './routes/test-email.js';
 dotenv.config();
 
 const app = express();
@@ -28,6 +30,8 @@ app.use('/api/code', codeRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/interviews', interviewRoutes);
+app.use('/api/resumes', resumeRoutes);
+app.use('/api/test-email', testEmailRoutes);
 
 mongoose.connect(process.env.MONGO_URI)
   .then(()=>console.log('Connected to MongoDb'))

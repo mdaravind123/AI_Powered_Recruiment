@@ -62,20 +62,24 @@ export default function ApplyJobWithFileUpload() {
   const uploadResumeFile = async () => {
     if (!resumeFile) {
       toast.error('Please select a resume file');
-      return;
+      return null;
     }
 
     const formData = new FormData();
     formData.append('file', resumeFile);
 
     try {
-      const { data } = await axios.post(`${API_BASE_URL}/api/jobs/upload-resume`, formData, {
+      const { data } = await axios.post(`${API_BASE_URL}/api/resumes/upload-and-process`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      return data.resumeUrl;
+      return {
+        resumeUrl: data.resumeUrl,
+        analysis: data.analysis
+      };
     } catch (err) {
-      toast.error('Failed to upload resume');
-      throw err;
+      console.error('Resume upload error:', err);
+      toast.error('Failed to upload and process resume');
+      return null;
     }
   };
 
@@ -92,8 +96,22 @@ export default function ApplyJobWithFileUpload() {
 
     setSubmitting(true);
     try {
-      // Upload resume file
-      const resumeUrl = await uploadResumeFile();
+      // Upload and process resume with Gemini extraction
+      const result = await uploadResumeFile();
+      if (!result) {
+        setSubmitting(false);
+        return;
+      }
+
+      const { resumeUrl, analysis } = result;
+
+      // Import the analyzer utility for skill matching
+      const { calculateMatchScore } = await import('../utils/resumeAnalyzer.js');
+
+      // Calculate match score
+      const matchScore = selectedJob.skills && analysis.skills
+        ? calculateMatchScore(selectedJob.skills, analysis.skills)
+        : 0;
 
       // Create application
       await axios.post(`${API_BASE_URL}/api/applications`, {
@@ -102,16 +120,18 @@ export default function ApplyJobWithFileUpload() {
         candidateName: user.name,
         candidateEmail: user.email,
         resumeUrl,
-        // Placeholder - match score will be calculated by backend
-        matchScore: 0,
+        matchScore,
         resumeAnalysis: {
-          summary: 'Resume uploaded and will be analyzed',
-          skills: [],
-          experience: 'Pending analysis'
+          summary: analysis.summary,
+          skills: analysis.skills,
+          experience: `${analysis.experience}+ years`,
+          education: analysis.education,
+          email: analysis.email,
+          phone: analysis.phone
         }
       });
 
-      toast.success('Application submitted! Resume uploaded successfully');
+      toast.success('Application submitted! Resume analyzed and uploaded successfully');
       setResumeFile(null);
       setResumePreview('');
       setSelectedJob(null);
@@ -119,6 +139,7 @@ export default function ApplyJobWithFileUpload() {
       if (err.response?.status === 400) {
         toast.error('You have already applied for this job');
       } else {
+        console.error('Application error:', err);
         toast.error('Failed to submit application');
       }
     } finally {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useUserStore } from '../store/useUserStore';
@@ -14,11 +15,15 @@ export default function EmployeeDashboard() {
   const [testResults, setTestResults] = useState({});
   const [interviews, setInterviews] = useState({});
   const [openChatApp, setOpenChatApp] = useState(null);
+  const userId = user?._id;
+  const location = useLocation(); // Track navigation changes
 
   useEffect(() => {
-    fetchApplications();
-    fetchInterviews();
-  }, []);
+    if (userId) {
+      fetchApplications();
+      fetchInterviews();
+    }
+  }, [userId, location.pathname]); // Re-fetch on navigation
 
   const fetchApplications = async () => {
     setLoading(true);
