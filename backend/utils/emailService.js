@@ -342,6 +342,146 @@ export const sendInterviewCancellationEmail = async (interviewDetails) => {
 };
 
 /**
+ * Send test assignment notification email to candidate
+ */
+export const sendTestAssignedEmail = async (testDetails) => {
+  console.log('\n📧 Sending test assignment email notification...');
+  
+  // Check if email is configured
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+    console.log('❌ Email not configured - skipping test assignment notification');
+    return { success: false, message: 'Email service not configured' };
+  }
+
+  try {
+    const {
+      candidateEmail,
+      candidateName,
+      recruiterName,
+      companyName,
+      jobTitle,
+      testName,
+      testDescription,
+      totalQuestions,
+      duration,
+      passingScore,
+      scheduledDate,
+      scheduledTime
+    } = testDetails;
+
+    // Format date for better readability
+    const dateObj = new Date(`${scheduledDate}T${scheduledTime}`);
+    const formattedDate = dateObj.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+    const formattedTime = dateObj.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; background: #f9f9f9; }
+            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 5px 5px 0 0; }
+            .header h1 { margin: 0; }
+            .content { background: white; padding: 20px; border-radius: 0 0 5px 5px; }
+            .detail-row { margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px; }
+            .detail-row strong { color: #667eea; }
+            .highlight-box { background: #e7f3ff; border-left: 4px solid #007bff; padding: 15px; margin: 15px 0; }
+            .footer { margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666; }
+            .button { display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; margin-top: 15px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>📝 Test Assigned!</h1>
+            </div>
+            <div class="content">
+              <p>Dear ${candidateName},</p>
+              
+              <p>You have been assigned a test for the <strong>${jobTitle}</strong> position at <strong>${companyName}</strong>.</p>
+
+              <div class="highlight-box">
+                <strong>📚 Test Name:</strong> ${testName}
+              </div>
+
+              ${testDescription ? `<div class="detail-row"><strong>Description:</strong><br>${testDescription}</div>` : ''}
+
+              <div class="detail-row">
+                <strong>❓ Total Questions:</strong> ${totalQuestions}
+              </div>
+
+              <div class="detail-row">
+                <strong>⏱️ Duration:</strong> ${duration} minutes
+              </div>
+
+              <div class="detail-row">
+                <strong>✅ Passing Score:</strong> ${passingScore}%
+              </div>
+
+              <div class="detail-row">
+                <strong>📅 Available From:</strong> ${formattedDate} at ${formattedTime}
+              </div>
+
+              <div class="detail-row">
+                <strong>👤 Assigned By:</strong> ${recruiterName}
+              </div>
+
+              <div class="highlight-box">
+                <strong>⚠️ Important Instructions:</strong>
+                <ul style="margin: 10px 0; padding-left: 20px;">
+                  <li>Log in to your dashboard to take the test</li>
+                  <li>Ensure you have a stable internet connection</li>
+                  <li>The test will be available from the scheduled date/time</li>
+                  <li>You must complete the test in one sitting</li>
+                  <li>Make sure you have ${duration} minutes of uninterrupted time</li>
+                </ul>
+              </div>
+
+              <p style="margin-top: 20px; color: #666;">
+                Please complete the test at your earliest convenience. Good luck!
+              </p>
+
+              <div class="footer">
+                <p>Best regards,<br><strong>${companyName}</strong> Recruitment Team</p>
+                <p>This is an automated email. Please do not reply directly to this message.</p>
+              </div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const mailOptions = {
+      from: `${process.env.COMPANY_NAME || 'AI Recruiter'} <${process.env.EMAIL_USER}>`,
+      to: candidateEmail,
+      subject: `📝 Test Assigned - ${testName} for ${jobTitle}`,
+      html: htmlContent
+    };
+
+    console.log('📨 Sending test assignment email:');
+    console.log('   To:', candidateEmail);
+    console.log('   Test:', testName);
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ Test assignment email sent successfully to ${candidateEmail}`);
+    return { success: true, messageId: info.messageId };
+  } catch (err) {
+    console.error('❌ Error sending test assignment email:', err.message);
+    return { success: false, error: err.message };
+  }
+};
+
+/**
  * Send new message notification email
  */
 export const sendNewMessageNotificationEmail = async (messageDetails) => {
@@ -498,5 +638,6 @@ export default {
   sendInterviewReminderEmail,
   sendInterviewCancellationEmail,
   sendNewMessageNotificationEmail,
-  sendWelcomeEmail
+  sendWelcomeEmail,
+  sendTestAssignedEmail
 };

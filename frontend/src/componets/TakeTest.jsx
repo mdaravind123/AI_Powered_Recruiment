@@ -231,13 +231,42 @@ export default function TakeTest({ testId, jobId, applicationId, onCompleted }) 
   };
 
   const calculateScore = () => {
-    let correctCount = 0;
+    // Calculate score similar to backend: accumulate score fractions
+    let scoreAccumulator = 0;
+    const totalQuestions = test.questions.length;
+
+      if (totalQuestions === 0) {
+        return 0; // No questions, score is 0%
+      }
+      
     test.questions.forEach((q, idx) => {
-      if (q.questionType === 'mcq' && answers[idx] === q.correctAnswer) {
-        correctCount++;
+      const userAnswer = answers[idx];
+      
+      if (q.questionType === 'mcq') {
+        // MCQ: full point if correct, 0 if wrong
+        if (userAnswer === q.correctAnswer) {
+          scoreAccumulator += 1;
+        }
+      } else if (q.questionType === 'coding') {
+        // Coding: partial credit based on sample test cases
+        // Note: Actual grading with hidden test cases happens on backend
+        // For now, we give 0.5 if code was attempted
+        if (userAnswer && userAnswer.trim().length > 0) {
+          scoreAccumulator += 0.5; // provisional; backend will recalculate
+        }
+      } else if (q.questionType === 'essay') {
+        // Essay: 0 points client-side (manual grading by recruiter)
+        // Note: Server will also skip this in auto-calculation
+        scoreAccumulator += 0;
       }
     });
-    return Math.round((correctCount / test.questions.length) * 100);
+
+    // Convert to percentage
+    const score = totalQuestions > 0 
+      ? Math.round((scoreAccumulator / totalQuestions) * 100)
+      : 0;
+    
+    return score;
   };
 
   const handleAutoSubmit = async () => {
@@ -407,8 +436,8 @@ export default function TakeTest({ testId, jobId, applicationId, onCompleted }) 
       // clear persisted state
       try { localStorage.removeItem(storageKey); } catch(e){}
 
-      // set local finished result and show completion UI to avoid updating parent during render
-      setFinishedResult({ totalScore, passed: resp.data.passed, appUpdated: !!resp.data.appUpdated });
+      // set local finished result with backend-validated score
+      setFinishedResult({ totalScore: secureScore, passed: resp.data.passed, appUpdated: !!resp.data.appUpdated });
       // exit fullscreen if active (best-effort)
       try {
         if (document.fullscreenElement || document.webkitFullscreenElement) {
@@ -537,7 +566,7 @@ export default function TakeTest({ testId, jobId, applicationId, onCompleted }) 
   }
 
   const question = test.questions[currentQuestion];
-
+  const scoring=calculateScore();
   // Fullscreen immersive layout
   return (
     <div

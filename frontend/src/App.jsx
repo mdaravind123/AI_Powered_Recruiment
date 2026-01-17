@@ -6,6 +6,7 @@ import Dashboard from "./pages/Dashboard";
 import Jobs from "./pages/Jobs";
 import JobDetails from "./pages/JobDetails";
 import ApplyJob from "./pages/ApplyJob";
+import CreateTestPage from "./pages/CreateTestPage";
 import { useUserStore } from "./store/useUserStore";
 
 export default function App() {
@@ -60,6 +61,7 @@ export default function App() {
           <Route path="/signup" element={<Signup />} />
           <Route path="/jobs" element={<Jobs />} />
           <Route path="/jobs/:id" element={user?.role === 'recruiter' ? <JobDetails /> : <ApplyJob />} />
+          <Route path="/create-test" element={user?.role === 'recruiter' ? <CreateTestPage /> : <Login />} />
         </Routes>
       </main>
     </div>

@@ -3,7 +3,6 @@ import Message from '../models/Message.js';
 import Application from '../models/Application.js';
 import Job from '../models/Job.js';
 import User from '../models/User.js';
-import { sendNewMessageNotificationEmail } from '../utils/emailService.js';
 
 const router = express.Router();
 
@@ -119,20 +118,8 @@ router.post('/', async (req, res) => {
       createdAt: new Date()
     });
 
-    // Send email notification to recipient (optional - can be disabled in settings)
-    try {
-      const job = await Job.findById(jobId).select('title');
-      await sendNewMessageNotificationEmail({
-        recipientEmail,
-        recipientName,
-        senderName,
-        companyName: process.env.COMPANY_NAME || 'AI Recruiter',
-        jobTitle: job?.title || 'Job Application',
-        messagePreview: content
-      });
-    } catch (emailErr) {
-      console.log('Email notification failed (non-critical):', emailErr.message);
-    }
+    // NOTE: Email notifications for chat messages have been disabled
+    // Emails are only sent for interview scheduling and test assignments
 
     res.status(201).json(message);
   } catch (err) {

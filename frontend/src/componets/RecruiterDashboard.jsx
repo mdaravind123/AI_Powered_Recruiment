@@ -1,23 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useUserStore } from '../store/useUserStore';
-import CreateTest from './CreateTest';
 import ChatWindow from './ChatWindow';
 import SkillDistribution from './SkillDistribution';
 
 export default function RecruiterDashboard() {
   const { user } = useUserStore();
+  const navigate = useNavigate();
   const [jobs, setJobs] = useState([]);
   const [selectedJob, setSelectedJob] = useState(null);
   const [applications, setApplications] = useState([]);
   const [tests, setTests] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [showCreateTest, setShowCreateTest] = useState(false);
   const [selectedApplications, setSelectedApplications] = useState([]);
-  const [testResults, setTestResults] = useState({});
+  const [selectedTestResults, setSelectedTestResults] = useState(null);
+  const [selectedTestName, setSelectedTestName] = useState('');
   const [openChatApp, setOpenChatApp] = useState(null);
+  const [showBulkAssign, setShowBulkAssign] = useState(false);
+  const [bulkTestId, setBulkTestId] = useState('');
+  const [topNCandidates, setTopNCandidates] = useState(5);
   const userId = user?._id;
   const location = useLocation(); // Track navigation changes
 
@@ -99,19 +102,59 @@ export default function RecruiterDashboard() {
     }
   };
 
-  const handleViewTestResults = async (testId) => {
+  const handleViewTestResults = async (testId, testName) => {
     try {
       const { data } = await axios.get(`/api/tests/${testId}/results`);
-      setTestResults(prev => ({
-        ...prev,
-        [testId]: data
-      }));
+      setSelectedTestResults(data);
+      setSelectedTestName(testName);
     } catch (err) {
       toast.error('Failed to fetch test results');
     }
   };
 
+  const handleBulkAssignTest = async () => {
+    if (!bulkTestId) {
+      toast.error('Please select a test');
+      return;
+    }
+    if (topNCandidates < 1 || topNCandidates > applications.length) {
+      toast.error(`Please enter a number between 1 and ${applications.length}`);
+      return;
+    }
+
+    try {
+      const { data } = await axios.post('/api/applications/bulk-assign-test', {
+        jobId: selectedJob,
+        testId: bulkTestId,
+        topN: topNCandidates
+      });
+      
+      toast.success(`Test assigned to top ${topNCandidates} candidates!`);
+      setShowBulkAssign(false);
+      setBulkTestId('');
+      setTopNCandidates(5);
+      fetchApplications(selectedJob);
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.message || 'Failed to assign test');
+    }
+  };
+
   const currentJob = jobs.find(j => j._id === selectedJob);
+  
+  // Calculate stats based on status for consistency
+  const stats = {
+    total: applications.length,
+    shortlisted: applications.filter(a => a.status === 'shortlisted').length,
+    testsAssigned: applications.filter(a => 
+      a.status === 'test_assigned' || 
+      a.status === 'test_completed' || 
+      (a.testIds && a.testIds.length > 0)
+    ).length,
+    testsCompleted: applications.filter(a => a.status === 'test_completed').length
+  };
+  
+  // Filter for specific stat displays (no longer needed as stats object is used)
   const shortlistedCandidates = applications.filter(a => a.status === 'shortlisted');
   const testedCandidates = applications.filter(a => a.status === 'test_completed');
 
@@ -144,30 +187,41 @@ export default function RecruiterDashboard() {
         <div className="grid grid-cols-4 gap-4">
           <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-600">
             <p className="text-gray-600">Total Applications</p>
-            <p className="text-2xl font-bold text-blue-600">{applications.length}</p>
+            <p className="text-2xl font-bold text-blue-600">{stats.total}</p>
           </div>
           <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-600">
             <p className="text-gray-600">Shortlisted</p>
-            <p className="text-2xl font-bold text-green-600">{shortlistedCandidates.length}</p>
+            <p className="text-2xl font-bold text-green-600">{stats.shortlisted}</p>
           </div>
           <div className="bg-purple-50 p-4 rounded-lg border-l-4 border-purple-600">
             <p className="text-gray-600">Tests Assigned</p>
-            <p className="text-2xl font-bold text-purple-600">{applications.filter(a => a.testIds && a.testIds.length > 0).length}</p>
+            <p className="text-2xl font-bold text-purple-600">{stats.testsAssigned}</p>
           </div>
           <div className="bg-orange-50 p-4 rounded-lg border-l-4 border-orange-600">
             <p className="text-gray-600">Tests Completed</p>
-            <p className="text-2xl font-bold text-orange-600">{testedCandidates.length}</p>
+            <p className="text-2xl font-bold text-orange-600">{stats.testsCompleted}</p>
           </div>
         </div>
       )}
 
-      {/* Create Test Button */}
-      <button
-        onClick={() => setShowCreateTest(true)}
-        className="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700"
-      >
-        + Create Online Test
-      </button>
+      {/* Action Buttons */}
+      <div className="flex gap-4">
+        <button
+          onClick={() => navigate(`/create-test?jobId=${selectedJob}`)}
+          className="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 transition-all duration-300 shadow-md hover:shadow-lg"
+        >
+          + Create Online Test
+        </button>
+        
+        {tests.length > 0 && applications.length > 0 && (
+          <button
+            onClick={() => setShowBulkAssign(true)}
+            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-all duration-300 shadow-md hover:shadow-lg"
+          >
+            📊 Bulk Assign Test to Top Candidates
+          </button>
+        )}
+      </div>
 
       {/* Tests List */}
       {tests.length > 0 && (
@@ -181,7 +235,7 @@ export default function RecruiterDashboard() {
                   <p className="text-sm text-gray-600">{test.totalQuestions} questions • {test.duration} mins</p>
                 </div>
                 <button
-                  onClick={() => handleViewTestResults(test._id)}
+                  onClick={() => handleViewTestResults(test._id, test.testName)}
                   className="text-blue-600 font-semibold text-sm"
                 >
                   View Results
@@ -190,16 +244,24 @@ export default function RecruiterDashboard() {
             ))}
           </div>
 
-          {/* Test Results */}
-          {Object.keys(testResults).length > 0 && (
-            <div className="mt-6 space-y-4">
-              <h3 className="font-bold text-lg">Test Results</h3>
-              {Object.entries(testResults).map(([testId, results]) => (
-                <div key={testId} className="max-h-48 overflow-y-auto border rounded p-4 bg-gray-50">
-                  {results.map(result => (
-                    <div key={result._id} className="flex justify-between items-center mb-2 pb-2 border-b">
+          {/* Test Results Modal */}
+          {selectedTestResults && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-96 overflow-y-auto">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="font-bold text-xl text-gray-800">Test Results: {selectedTestName}</h3>
+                  <button
+                    onClick={() => setSelectedTestResults(null)}
+                    className="text-2xl hover:text-red-600 font-bold"
+                  >
+                    &times;
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {selectedTestResults.map(result => (
+                    <div key={result._id} className="flex justify-between items-center p-3 bg-gray-50 rounded border">
                       <div>
-                        <p className="font-semibold">{result.candidateName}</p>
+                        <p className="font-semibold text-gray-800">{result.candidateName}</p>
                         <p className="text-sm text-gray-600">{result.candidateEmail}</p>
                       </div>
                       <div className="text-right">
@@ -211,7 +273,7 @@ export default function RecruiterDashboard() {
                     </div>
                   ))}
                 </div>
-              ))}
+              </div>
             </div>
           )}
         </div>
@@ -338,17 +400,84 @@ export default function RecruiterDashboard() {
         )}
       </div>
 
-      {/* Create Test Modal */}
-      {showCreateTest && (
-        <CreateTest
-          jobId={selectedJob}
-          onTestCreated={() => {
-            setShowCreateTest(false);
-            fetchTests(selectedJob);
-            toast.success('Test created successfully!');
-          }}
-          onCancel={() => setShowCreateTest(false)}
-        />
+      {/* Bulk Assign Test Modal */}
+      {showBulkAssign && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">Bulk Assign Test</h2>
+              <button onClick={() => setShowBulkAssign(false)} className="text-2xl hover:text-red-600">&times;</button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block font-semibold mb-2 text-gray-700">Select Test</label>
+                <select
+                  value={bulkTestId}
+                  onChange={(e) => setBulkTestId(e.target.value)}
+                  className="w-full border-2 border-gray-300 rounded-lg px-4 py-2 focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="">Choose a test...</option>
+                  {tests.map(test => (
+                    <option key={test._id} value={test._id}>
+                      {test.testName} ({test.totalQuestions} questions)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-2 text-gray-700">
+                  Number of Top Candidates (by Match Score)
+                </label>
+                <input
+                  type="number"
+                  value={topNCandidates}
+                  onChange={(e) => setTopNCandidates(Number(e.target.value))}
+                  className="w-full border-2 border-gray-300 rounded-lg px-4 py-2 focus:border-blue-500 focus:outline-none"
+                  min="1"
+                  max={applications.length}
+                  placeholder="e.g., 5"
+                />
+                <p className="text-sm text-gray-500 mt-2">
+                  Total candidates: {applications.length}
+                </p>
+              </div>
+
+              {topNCandidates > 0 && topNCandidates <= applications.length && (
+                <div className="bg-blue-50 border-l-4 border-blue-600 p-4 rounded">
+                  <p className="font-semibold text-blue-800 mb-2">Preview: Top {topNCandidates} Candidates</p>
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    {applications
+                      .sort((a, b) => b.matchScore - a.matchScore)
+                      .slice(0, topNCandidates)
+                      .map((app, idx) => (
+                        <div key={app._id} className="text-sm text-gray-700 flex justify-between">
+                          <span>{idx + 1}. {app.candidateName}</span>
+                          <span className="font-semibold text-blue-600">{app.matchScore}%</span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setShowBulkAssign(false)}
+                className="px-4 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-100 font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkAssignTest}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold"
+              >
+                Assign to Top {topNCandidates}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Chat Window Modal */}

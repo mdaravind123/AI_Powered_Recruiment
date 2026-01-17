@@ -80,7 +80,12 @@ export default function EmployeeDashboard() {
   const stats = {
     total: applications.length,
     shortlisted: applications.filter(a => a.status === 'shortlisted').length,
-    testsAssigned: applications.reduce((sum, a) => sum + ((a.testIds && a.testIds.length) || (a.testId ? 1 : 0)), 0),
+    testsAssigned: applications.filter(a => 
+      a.status === 'test_assigned' || 
+      a.status === 'test_completed' ||
+      (a.testIds && a.testIds.length > 0) ||
+      (a.testId ? true : false)
+    ).length,
     testsCompleted: applications.filter(a => a.status === 'test_completed').length,
   };
 

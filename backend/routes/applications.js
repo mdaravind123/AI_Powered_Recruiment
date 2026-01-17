@@ -3,6 +3,7 @@ import Application from '../models/Application.js';
 import Test from '../models/Test.js';
 import TestResult from '../models/TestResult.js';
 import { processResumeFromUrl } from '../utils/resumeExtractor.js';
+import { sendTestAssignedEmail } from '../utils/emailService.js';
 import axios from 'axios';
 
 const router = express.Router();
@@ -86,6 +87,31 @@ router.post('/', async (req, res) => {
   }
 });
 
+// Get statistics for a job (recruiter view)
+router.get('/job/:jobId/stats', async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const applications = await Application.find({ jobId });
+
+    const stats = {
+      total: applications.length,
+      shortlisted: applications.filter(a => a.status === 'shortlisted').length,
+      testsAssigned: applications.filter(a => 
+        a.status === 'test_assigned' || 
+        a.status === 'test_completed' || 
+        (a.testIds && a.testIds.length > 0)
+      ).length,
+      testsCompleted: applications.filter(a => a.status === 'test_completed').length,
+      rejected: applications.filter(a => a.status === 'rejected').length,
+      interviewed: applications.filter(a => a.status === 'interview_scheduled' || a.status === 'interview_completed').length
+    };
+
+    res.json(stats);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch job statistics' });
+  }
+});
+
 // Get all applications for a job (recruiter view)
 router.get('/job/:jobId', async (req, res) => {
   try {
@@ -99,6 +125,32 @@ router.get('/job/:jobId', async (req, res) => {
     res.json(applications);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch applications' });
+  }
+});
+
+// Get statistics for a candidate
+router.get('/candidate/:candidateId/stats', async (req, res) => {
+  try {
+    const { candidateId } = req.params;
+    const applications = await Application.find({ candidateId });
+
+    const stats = {
+      total: applications.length,
+      shortlisted: applications.filter(a => a.status === 'shortlisted').length,
+      testsAssigned: applications.filter(a => 
+        a.status === 'test_assigned' || 
+        a.status === 'test_completed' ||
+        (a.testIds && a.testIds.length > 0) ||
+        (a.testId ? true : false)
+      ).length,
+      testsCompleted: applications.filter(a => a.status === 'test_completed').length,
+      rejected: applications.filter(a => a.status === 'rejected').length,
+      interviewed: applications.filter(a => a.status === 'interview_scheduled' || a.status === 'interview_completed').length
+    };
+
+    res.json(stats);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch candidate statistics' });
   }
 });
 
@@ -190,11 +242,137 @@ router.put('/:applicationId/assign-test', async (req, res) => {
     application.testAssignedAt = new Date();
     await application.save();
 
+    // Send email notification to candidate
+    console.log('\n🔔 Attempting to send test assignment email...');
+    try {
+      const emailResult = await sendTestAssignedEmail({
+        candidateEmail: application.candidateEmail,
+        candidateName: application.candidateName,
+        recruiterName: test.recruiterId?.name || 'Recruiter',
+        companyName: process.env.COMPANY_NAME || 'AI Recruiter',
+        jobTitle: application.jobId?.title || 'Position',
+        testName: test.testName,
+        testDescription: test.description,
+        totalQuestions: test.totalQuestions,
+        duration: test.duration,
+        passingScore: test.passingScore,
+        scheduledDate: test.scheduledDate,
+        scheduledTime: test.scheduledTime
+      });
+      
+      if (emailResult.success) {
+        console.log('✅ Test assignment email sent successfully');
+      } else {
+        console.log('⚠️  Test assigned but email notification failed:', emailResult.message || emailResult.error);
+      }
+    } catch (emailErr) {
+      console.log('⚠️  Email notification failed (non-critical):', emailErr.message);
+    }
+
     const populated = await Application.findById(applicationId).populate('testIds.testId').populate('testIds.result');
     res.json(populated);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Failed to assign test', error: err.message });
+  }
+});
+
+// Bulk assign test to top N candidates by match score
+router.post('/bulk-assign-test', async (req, res) => {
+  try {
+    const { jobId, testId, topN } = req.body;
+
+    if (!jobId || !testId || !topN) {
+      return res.status(400).json({ message: 'jobId, testId, and topN are required' });
+    }
+
+    if (topN < 1) {
+      return res.status(400).json({ message: 'topN must be at least 1' });
+    }
+
+    const test = await Test.findById(testId);
+    if (!test) {
+      return res.status(404).json({ message: 'Test not found' });
+    }
+
+    // Get all applications for the job, sorted by match score (descending)
+    const applications = await Application.find({ jobId })
+      .sort({ matchScore: -1 })
+      .limit(topN);
+
+    if (applications.length === 0) {
+      return res.status(404).json({ message: 'No applications found for this job' });
+    }
+
+    // Assign test to each of the top N candidates
+    const assignedCandidates = [];
+    let emailsSent = 0;
+    let emailsFailed = 0;
+    
+    for (const application of applications) {
+      // Skip if already assigned this test
+      const alreadyAssigned = application.testIds.some(t => t.testId.toString() === testId);
+      if (!alreadyAssigned) {
+        application.testIds.push({
+          testId,
+          assignedAt: new Date()
+        });
+        
+        if (application.status !== 'rejected') {
+          application.status = 'test_assigned';
+        }
+        application.testAssignedAt = new Date();
+        await application.save();
+
+        // Send email notification to each candidate
+        try {
+          const emailResult = await sendTestAssignedEmail({
+            candidateEmail: application.candidateEmail,
+            candidateName: application.candidateName,
+            recruiterName: test.recruiterId?.name || 'Recruiter',
+            companyName: process.env.COMPANY_NAME || 'AI Recruiter',
+            jobTitle: 'Position',
+            testName: test.testName,
+            testDescription: test.description,
+            totalQuestions: test.totalQuestions,
+            duration: test.duration,
+            passingScore: test.passingScore,
+            scheduledDate: test.scheduledDate,
+            scheduledTime: test.scheduledTime
+          });
+          
+          if (emailResult.success) {
+            emailsSent++;
+          } else {
+            emailsFailed++;
+          }
+        } catch (emailErr) {
+          console.log(`⚠️  Email failed for ${application.candidateEmail}:`, emailErr.message);
+          emailsFailed++;
+        }
+      }
+      
+      assignedCandidates.push({
+        candidateName: application.candidateName,
+        candidateEmail: application.candidateEmail,
+        matchScore: application.matchScore
+      });
+    }
+
+    console.log(`\n✅ Bulk assignment complete: ${emailsSent} emails sent, ${emailsFailed} failed`);
+
+    res.json({
+      message: `Test assigned to top ${applications.length} candidates`,
+      assignedCandidates,
+      testName: test.testName,
+      emailNotifications: {
+        sent: emailsSent,
+        failed: emailsFailed
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to bulk assign test', error: err.message });
   }
 });
 
@@ -236,6 +414,44 @@ router.get('/job/:jobId/shortlist-candidates', async (req, res) => {
     res.json(applications);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch candidates for shortlisting' });
+  }
+});
+
+// Sync application statuses - ensure testIds array changes trigger status updates
+router.post('/sync-statuses', async (req, res) => {
+  try {
+    const applications = await Application.find({});
+    let updated = 0;
+
+    for (const app of applications) {
+      let needsUpdate = false;
+      const oldStatus = app.status;
+
+      // If test is completed, status should be test_completed
+      if (app.status === 'test_completed') {
+        // This is correct, no change needed
+        continue;
+      }
+
+      // If testIds has entries, status should be at least test_assigned
+      if (app.testIds && app.testIds.length > 0) {
+        if (app.status !== 'test_assigned' && app.status !== 'test_completed' && app.status !== 'rejected') {
+          app.status = 'test_assigned';
+          needsUpdate = true;
+        }
+      }
+
+      if (needsUpdate) {
+        await app.save();
+        updated++;
+        console.log(`Synced application ${app._id}: ${oldStatus} -> ${app.status}`);
+      }
+    }
+
+    res.json({ message: `Synced ${updated} applications`, count: updated });
+  } catch (err) {
+    console.error('Sync error:', err);
+    res.status(500).json({ message: 'Failed to sync statuses', error: err.message });
   }
 });
 

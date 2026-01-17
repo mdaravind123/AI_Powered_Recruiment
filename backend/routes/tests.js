@@ -54,6 +54,29 @@ router.get('/job/:jobId', async (req, res) => {
   }
 });
 
+// Get test results for a test (MUST be before /:testId route)
+router.get('/:testId/results', async (req, res) => {
+  try {
+    const { testId } = req.params;
+    if (!testId || !mongoose.Types.ObjectId.isValid(testId)) {
+      return res.status(400).json({ message: 'Invalid test id' });
+    }
+
+    // Some historical records might have testId saved as either ObjectId or string
+    const testObjId = new mongoose.Types.ObjectId(testId);
+    const query = { $or: [{ testId: testObjId }, { testId }, { testId: testId.toString() }] };
+
+    console.log('Fetching results for testId:', testId);
+    const results = await TestResult.find(query).sort({ completedAt: -1 }).lean();
+    console.log('Found results count:', results.length, 'ids:', results.map(r => String(r._id)));
+
+    res.json(results);
+  } catch (err) {
+    console.error('Error fetching results:', err);
+    res.status(500).json({ message: 'Failed to fetch test results' });
+  }
+});
+
 // Get test by ID (for test taking)
 router.get('/:testId', async (req, res) => {
   try {
@@ -107,20 +130,6 @@ router.get('/:testId', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch test' });
-  }
-});
-
-// Get test results for a test
-router.get('/:testId/results', async (req, res) => {
-  try {
-    const { testId } = req.params;
-    if (!testId || !mongoose.Types.ObjectId.isValid(testId)) {
-      return res.status(400).json({ message: 'Invalid test id' });
-    }
-    const results = await TestResult.find({ testId: new mongoose.Types.ObjectId(testId) }).populate('candidateId', 'name email');
-    res.json(results);
-  } catch (err) {
-    res.status(500).json({ message: 'Failed to fetch test results' });
   }
 });
 
@@ -375,9 +384,7 @@ router.delete('/:testId', async (req, res) => {
   }
 });
 
-export default router;
-
-// Debug: grouped test results counts (not exported as route earlier)
+// Debug: grouped test results counts
 router.get('/debug/grouped-results', async (req, res) => {
   try {
     const agg = await TestResult.aggregate([
@@ -399,3 +406,5 @@ router.get('/debug/recent-results', async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch recent results', error: err.message });
   }
 });
+
+export default router;
