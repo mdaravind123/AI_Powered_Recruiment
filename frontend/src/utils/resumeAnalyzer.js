@@ -4,7 +4,104 @@ import axios from 'axios';
  * Utility functions for resume analysis and matching
  */
 
-// Simple skill extraction from resume text
+// Skill synonyms and normalizations
+const skillSynonyms = {
+  'js': 'JavaScript',
+  'ts': 'TypeScript',
+  'py': 'Python',
+  'nodejs': 'Node.js',
+  'node': 'Node.js',
+  'react.js': 'React',
+  'reactjs': 'React',
+  'vue.js': 'Vue',
+  'vuejs': 'Vue',
+  'angular.js': 'Angular',
+  'angularjs': 'Angular',
+  'express.js': 'Express',
+  'expressjs': 'Express',
+  'mongo': 'MongoDB',
+  'postgres': 'PostgreSQL',
+  'mysql': 'MySQL',
+  'mariadb': 'MySQL',
+  'firebase': 'Firebase',
+  'aws': 'AWS',
+  'amazon': 'AWS',
+  'azure': 'Azure',
+  'gcp': 'GCP',
+  'google cloud': 'GCP',
+  'docker': 'Docker',
+  'kubernetes': 'Kubernetes',
+  'k8s': 'Kubernetes',
+  'git': 'Git',
+  'rest': 'REST API',
+  'restful': 'REST API',
+  'graphql': 'GraphQL',
+  'java': 'Java',
+  'cplusplus': 'C++',
+  'cpp': 'C++',
+  'c#': 'C#',
+  'csharp': 'C#',
+  'dotnet': '.NET',
+  'php': 'PHP',
+  'laravel': 'Laravel',
+  'django': 'Django',
+  'flask': 'Flask',
+  'springboot': 'Spring Boot',
+  'spring boot': 'Spring Boot',
+  'html': 'HTML',
+  'css': 'CSS',
+  'scss': 'SCSS',
+  'sass': 'SCSS',
+  'tailwind': 'Tailwind',
+  'bootstrap': 'Bootstrap',
+  'materialui': 'Material UI',
+  'material-ui': 'Material UI',
+  'redux': 'Redux',
+  'nextjs': 'Next.js',
+  'next.js': 'Next.js',
+  'nuxtjs': 'Nuxt',
+  'nuxt.js': 'Nuxt',
+  'svelte': 'Svelte',
+  'webpack': 'Webpack',
+  'vite': 'Vite',
+  'jest': 'Jest',
+  'mocha': 'Mocha',
+  'cypress': 'Cypress',
+  'selenium': 'Selenium',
+  'jira': 'JIRA',
+  'agile': 'Agile',
+  'scrum': 'Scrum',
+  'cicd': 'CI/CD',
+  'ci/cd': 'CI/CD',
+  'linux': 'Linux',
+  'windows': 'Windows',
+  'macos': 'MacOS',
+  'excel': 'Excel',
+  'sql': 'SQL',
+  'hadoop': 'Hadoop',
+  'spark': 'Spark',
+  'data analysis': 'Data Analysis',
+  'machine learning': 'Machine Learning',
+  'ml': 'Machine Learning',
+  'ai': 'Artificial Intelligence',
+  'artificial intelligence': 'Artificial Intelligence'
+};
+
+// Normalize skill name
+const normalizeSkill = (skill) => {
+  const trimmed = skill.trim();
+  const lower = trimmed.toLowerCase();
+  
+  // Check if there's an exact synonym match
+  if (skillSynonyms[lower]) {
+    return skillSynonyms[lower];
+  }
+  
+  // Return original with proper casing
+  return trimmed;
+};
+
+// Simple skill extraction from resume text with better matching
 export const extractSkills = (resumeText) => {
   const commonSkills = [
     'JavaScript', 'TypeScript', 'React', 'Vue', 'Angular', 'Node.js', 'Express',
@@ -12,31 +109,44 @@ export const extractSkills = (resumeText) => {
     'Docker', 'Kubernetes', 'Git', 'REST API', 'GraphQL', 'Python', 'Java',
     'C++', 'C#', '.NET', 'PHP', 'Laravel', 'Django', 'Flask', 'Spring Boot',
     'HTML', 'CSS', 'SCSS', 'Tailwind', 'Bootstrap', 'Material UI', 'Redux',
-    'Next.js', 'Nuxt', 'Svelte', 'WebPack', 'Vite', 'Jest', 'Mocha', 'Cypress',
-    'Selenium', 'JIRA', 'Agile', 'Scrum', 'CI/CD', 'Linux', 'Windows', 'MacOS'
+    'Next.js', 'Nuxt', 'Svelte', 'Webpack', 'Vite', 'Jest', 'Mocha', 'Cypress',
+    'Selenium', 'JIRA', 'Agile', 'Scrum', 'CI/CD', 'Linux', 'Windows', 'MacOS',
+    'Excel', 'SQL', 'Hadoop', 'Spark', 'Data Analysis', 'Machine Learning',
+    'Artificial Intelligence', 'API', 'Microservices', 'Cloud Computing'
   ];
 
+  const textLower = resumeText.toLowerCase();
   const foundSkills = commonSkills.filter(skill =>
-    resumeText.toLowerCase().includes(skill.toLowerCase())
+    textLower.includes(skill.toLowerCase())
   );
 
   return [...new Set(foundSkills)]; // Remove duplicates
 };
 
-// Calculate match score based on skills
+// Calculate match score based on skills with improved logic
 export const calculateMatchScore = (requiredSkills, candidateSkills) => {
-  if (requiredSkills.length === 0) return 100;
+  if (!requiredSkills || requiredSkills.length === 0) return 100;
+  if (!candidateSkills || candidateSkills.length === 0) return 0;
 
-  const requiredLower = requiredSkills.map(s => s.toLowerCase());
-  const candidateLower = candidateSkills.map(s => s.toLowerCase());
+  // Normalize all skills
+  const normalizedRequired = requiredSkills
+    .map(s => normalizeSkill(s))
+    .filter(Boolean);
+  
+  const normalizedCandidate = candidateSkills
+    .map(s => normalizeSkill(s))
+    .filter(Boolean);
 
-  const matches = requiredLower.filter(skill =>
-    candidateLower.some(cSkill =>
-      cSkill.includes(skill) || skill.includes(cSkill)
-    )
+  if (normalizedRequired.length === 0) return 100;
+  if (normalizedCandidate.length === 0) return 0;
+
+  // Count exact matches
+  const matches = normalizedRequired.filter(reqSkill =>
+    normalizedCandidate.includes(reqSkill)
   ).length;
 
-  return Math.round((matches / requiredSkills.length) * 100);
+  // Calculate percentage based on required skills
+  return Math.round((matches / normalizedRequired.length) * 100);
 };
 
 // Extract years of experience from resume

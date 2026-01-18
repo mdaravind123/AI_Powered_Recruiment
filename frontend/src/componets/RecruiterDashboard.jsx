@@ -140,6 +140,22 @@ export default function RecruiterDashboard() {
     }
   };
 
+  const handleToggleJobStatus = async () => {
+    try {
+      const newStatus = currentJob.status === 'open' ? 'closed' : 'open';
+      const { data } = await axios.put(`/api/jobs/${selectedJob}/status`, { status: newStatus });
+      
+      const statusText = newStatus === 'open' ? 'reopened' : 'closed';
+      toast.success(`Job ${statusText} successfully!`);
+      
+      // Update jobs list
+      setJobs(jobs.map(j => j._id === selectedJob ? data : j));
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to update job status');
+    }
+  };
+
   const currentJob = jobs.find(j => j._id === selectedJob);
   
   // Calculate stats based on status for consistency
@@ -167,19 +183,30 @@ export default function RecruiterDashboard() {
       </div>
 
       {/* Job Selection */}
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h2 className="text-xl font-bold mb-4">Select Job</h2>
-        <select
-          value={selectedJob || ''}
-          onChange={(e) => setSelectedJob(e.target.value)}
-          className="w-full border rounded px-3 py-2"
-        >
-          {jobs.map(job => (
-            <option key={job._id} value={job._id}>
-              {job.title} - {applications.filter(a => a.jobId === job._id).length} applications
-            </option>
-          ))}
-        </select>
+      <div className="bg-white p-6 rounded-lg shadow-lg border-2 border-blue-200">
+        <h2 className="text-xl font-bold mb-4 text-gray-800">Select Job to Manage</h2>
+        <div className="flex gap-4 items-center flex-wrap">
+          <select
+            value={selectedJob || ''}
+            onChange={(e) => setSelectedJob(e.target.value)}
+            className="flex-1 min-w-[300px] border-2 border-gray-300 rounded-lg px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+          >
+            {jobs.map(job => (
+              <option key={job._id} value={job._id}>
+                {job.title} - {job.status === 'open' ? '✓ Open' : '✕ Closed'} - {applications.filter(a => a.jobId === job._id).length} applications
+              </option>
+            ))}
+          </select>
+          {currentJob && (
+            <div className={`px-4 py-2 rounded-full font-bold text-white ${
+              currentJob.status === 'open' 
+                ? 'bg-gradient-to-r from-green-400 to-emerald-500' 
+                : 'bg-gradient-to-r from-red-400 to-red-600'
+            }`}>
+              {currentJob.status === 'open' ? '🟢 Open' : '🔴 Closed'}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Job Stats */}
@@ -205,10 +232,10 @@ export default function RecruiterDashboard() {
       )}
 
       {/* Action Buttons */}
-      <div className="flex gap-4">
+      <div className="flex gap-4 flex-wrap">
         <button
           onClick={() => navigate(`/create-test?jobId=${selectedJob}`)}
-          className="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 transition-all duration-300 shadow-md hover:shadow-lg"
+          className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105"
         >
           + Create Online Test
         </button>
@@ -216,11 +243,22 @@ export default function RecruiterDashboard() {
         {tests.length > 0 && applications.length > 0 && (
           <button
             onClick={() => setShowBulkAssign(true)}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-all duration-300 shadow-md hover:shadow-lg"
+            className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-purple-700 hover:to-pink-700 transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105"
           >
-            📊 Bulk Assign Test to Top Candidates
+            Bulk Assign Test
           </button>
         )}
+
+        <button
+          onClick={handleToggleJobStatus}
+          className={`px-6 py-3 rounded-lg font-semibold transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 text-white ${
+            currentJob?.status === 'open' 
+              ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700' 
+              : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700'
+          }`}
+        >
+          {currentJob?.status === 'open' ? 'Close Job' : 'Reopen Job'}
+        </button>
       </div>
 
       {/* Tests List */}

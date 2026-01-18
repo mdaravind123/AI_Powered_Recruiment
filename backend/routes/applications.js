@@ -2,6 +2,7 @@ import express from 'express';
 import Application from '../models/Application.js';
 import Test from '../models/Test.js';
 import TestResult from '../models/TestResult.js';
+import Job from '../models/Job.js';
 import { processResumeFromUrl } from '../utils/resumeExtractor.js';
 import { sendTestAssignedEmail } from '../utils/emailService.js';
 import axios from 'axios';
@@ -12,6 +13,15 @@ const router = express.Router();
 router.post('/', async (req, res) => {
   try {
     const { jobId, candidateId, candidateName, candidateEmail, resumeUrl, matchScore, resumeAnalysis } = req.body;
+
+    // Check if job exists and is open
+    const job = await Job.findById(jobId);
+    if (!job) {
+      return res.status(404).json({ message: 'Job not found' });
+    }
+    if (job.status === 'closed') {
+      return res.status(400).json({ message: 'This job is no longer accepting applications' });
+    }
 
     // Check if already applied
     const existing = await Application.findOne({ jobId, candidateId });
@@ -69,13 +79,23 @@ router.post('/', async (req, res) => {
       }
     }
 
+    // Import and use improved match score calculation
+    const { calculateMatchScore } = await import('../utils/resumeAnalyzer.js');
+    
+    // Calculate match score server-side for accuracy
+    const jobSkills = Array.isArray(job.skills) ? job.skills : [];
+    const resumeSkills = Array.isArray(finalAnalysis.skills) ? finalAnalysis.skills : [];
+    const calculatedScore = calculateMatchScore(jobSkills, resumeSkills);
+    
+    console.log(`Match Score Calculation - Job: ${job.title}, Job Skills: ${jobSkills.join(', ')}, Resume Skills: ${resumeSkills.join(', ')}, Score: ${calculatedScore}%`);
+
     const application = await Application.create({
       jobId,
       candidateId,
       candidateName,
       candidateEmail,
       resumeUrl,
-      matchScore: matchScore || 0,
+      matchScore: calculatedScore, // Use server-calculated score
       resumeAnalysis: finalAnalysis,
       status: 'applied'
     });
@@ -92,18 +112,20 @@ router.get('/job/:jobId/stats', async (req, res) => {
   try {
     const { jobId } = req.params;
     const applications = await Application.find({ jobId });
+    // Active applications exclude rejected
+    const activeApplications = applications.filter(a => a.status !== 'rejected');
 
     const stats = {
-      total: applications.length,
-      shortlisted: applications.filter(a => a.status === 'shortlisted').length,
-      testsAssigned: applications.filter(a => 
+      total: activeApplications.length, // Show only active applicants to recruiters
+      shortlisted: activeApplications.filter(a => a.status === 'shortlisted').length,
+      testsAssigned: activeApplications.filter(a => 
         a.status === 'test_assigned' || 
         a.status === 'test_completed' || 
         (a.testIds && a.testIds.length > 0)
       ).length,
-      testsCompleted: applications.filter(a => a.status === 'test_completed').length,
-      rejected: applications.filter(a => a.status === 'rejected').length,
-      interviewed: applications.filter(a => a.status === 'interview_scheduled' || a.status === 'interview_completed').length
+      testsCompleted: activeApplications.filter(a => a.status === 'test_completed').length,
+      rejected: applications.filter(a => a.status === 'rejected').length, // Track rejected separately
+      interviewed: activeApplications.filter(a => a.status === 'interview_scheduled' || a.status === 'interview_completed').length
     };
 
     res.json(stats);
@@ -116,7 +138,8 @@ router.get('/job/:jobId/stats', async (req, res) => {
 router.get('/job/:jobId', async (req, res) => {
   try {
     const { jobId } = req.params;
-    const applications = await Application.find({ jobId })
+    // Exclude rejected candidates from recruiter dashboard view (kept in DB for audit)
+    const applications = await Application.find({ jobId, status: { $ne: 'rejected' } })
       .populate('testIds.testId')
       .populate('testIds.result')
       .populate('testResult')
@@ -128,24 +151,26 @@ router.get('/job/:jobId', async (req, res) => {
   }
 });
 
-// Get statistics for a candidate
+// Get statistics for a candidate (exclude rejected from active counts)
 router.get('/candidate/:candidateId/stats', async (req, res) => {
   try {
     const { candidateId } = req.params;
     const applications = await Application.find({ candidateId });
+    // Active applications exclude rejected
+    const activeApplications = applications.filter(a => a.status !== 'rejected');
 
     const stats = {
-      total: applications.length,
-      shortlisted: applications.filter(a => a.status === 'shortlisted').length,
-      testsAssigned: applications.filter(a => 
+      total: activeApplications.length, // Count only active applications
+      shortlisted: activeApplications.filter(a => a.status === 'shortlisted').length,
+      testsAssigned: activeApplications.filter(a => 
         a.status === 'test_assigned' || 
         a.status === 'test_completed' ||
         (a.testIds && a.testIds.length > 0) ||
         (a.testId ? true : false)
       ).length,
-      testsCompleted: applications.filter(a => a.status === 'test_completed').length,
-      rejected: applications.filter(a => a.status === 'rejected').length,
-      interviewed: applications.filter(a => a.status === 'interview_scheduled' || a.status === 'interview_completed').length
+      testsCompleted: activeApplications.filter(a => a.status === 'test_completed').length,
+      rejected: applications.filter(a => a.status === 'rejected').length, // Separate count for rejected
+      interviewed: activeApplications.filter(a => a.status === 'interview_scheduled' || a.status === 'interview_completed').length
     };
 
     res.json(stats);

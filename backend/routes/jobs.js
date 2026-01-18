@@ -49,5 +49,32 @@ router.get('/:id/candidates', async (req, res) => {
   }
 });
 
+// Update job status (open/closed)
+router.put('/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!['open', 'closed'].includes(status)) {
+      return res.status(400).json({ message: 'Invalid status. Must be "open" or "closed"' });
+    }
+
+    const job = await Job.findByIdAndUpdate(
+      id,
+      { status, updatedAt: Date.now() },
+      { new: true }
+    );
+
+    if (!job) {
+      return res.status(404).json({ message: 'Job not found' });
+    }
+
+    res.json(job);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to update job status' });
+  }
+});
+
 
 export default router;

@@ -9,6 +9,19 @@ const jobSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true, 
+  },
+  status: {
+    type: String,
+    enum: ['open', 'closed'],
+    default: 'open'
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
   }
 });
 

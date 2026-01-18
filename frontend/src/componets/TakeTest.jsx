@@ -578,12 +578,12 @@ export default function TakeTest({ testId, jobId, applicationId, onCompleted }) 
       className="fixed inset-0 bg-gray-900 text-white z-50 flex flex-col"
     >
       {/* Top bar - minimal */}
-      <div className="flex items-center justify-between px-6 py-3 bg-black/70">
-        <div className="font-semibold text-lg">{test.testName}</div>
-        <div className="flex items-center gap-6">
-          <div className={`text-2xl font-bold ${timeRemaining < 300 ? 'text-red-400' : ''}`}>{formatTime(timeRemaining)}</div>
-          <div className="text-sm">Q {currentQuestion + 1}/{test.questions.length}</div>
-          <div className="text-sm">Violations: {violations}</div>
+      <div className="flex items-center justify-between px-8 py-5 bg-gradient-to-r from-gray-900 via-black to-gray-900 shadow-lg border-b-2 border-blue-500/30">
+        <div className="font-bold text-2xl tracking-wide text-blue-100 drop-shadow-lg">{test.testName}</div>
+        <div className="flex items-center gap-8">
+          <div className={`text-3xl font-extrabold tabular-nums px-4 py-2 rounded-lg ${timeRemaining < 300 ? 'text-red-400 bg-red-900/20 animate-pulse' : 'text-green-400 bg-green-900/10'} shadow-md`}>{formatTime(timeRemaining)}</div>
+          <div className="text-xl font-semibold bg-blue-900/30 px-4 py-2 rounded-lg border border-blue-500/30">Q {currentQuestion + 1}/{test.questions.length}</div>
+          <div className="text-xl font-semibold bg-purple-900/30 px-4 py-2 rounded-lg border border-purple-500/30">Violations: {violations}</div>
         </div>
       </div>
 

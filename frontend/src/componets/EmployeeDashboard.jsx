@@ -78,7 +78,7 @@ export default function EmployeeDashboard() {
   };
 
   const stats = {
-    total: applications.length,
+    total: applications.filter(a => a.status !== 'rejected').length,
     shortlisted: applications.filter(a => a.status === 'shortlisted').length,
     testsAssigned: applications.filter(a => 
       a.status === 'test_assigned' || 
@@ -134,19 +134,30 @@ export default function EmployeeDashboard() {
                     <h3 className="text-lg font-bold text-gray-800">{app.jobId?.title}</h3>
                     <p className="text-sm text-gray-600">{app.jobId?.description}</p>
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-sm font-semibold whitespace-nowrap ml-4 ${
+                  <span className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap ml-4 ${
+                    app.status === 'rejected' ? 'bg-red-200 text-red-900 border-2 border-red-500 shadow-lg' :
                     app.status === 'applied' ? 'bg-gray-100 text-gray-800' :
                     app.status === 'shortlisted' ? 'bg-green-100 text-green-800' :
                     app.status === 'test_assigned' ? 'bg-blue-100 text-blue-800' :
                     app.status === 'test_completed' ? 'bg-purple-100 text-purple-800' :
+                    app.status === 'interview_scheduled' ? 'bg-amber-100 text-amber-800' :
+                    app.status === 'interview_completed' ? 'bg-emerald-100 text-emerald-800' :
                     'bg-red-100 text-red-800'
                   }`}>
-                    {app.status.toUpperCase().replace(/_/g, ' ')}
+                    {app.status === 'rejected' ? '❌ REJECTED' : app.status.toUpperCase().replace(/_/g, ' ')}
                   </span>
                 </div>
 
+                {/* Rejection Notice */}
+                {app.status === 'rejected' && (
+                  <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-3 rounded">
+                    <p className="text-red-900 font-semibold">Application Rejected</p>
+                    <p className="text-red-800 text-sm mt-1">Unfortunately, your application for this position has been rejected. You can apply for other open positions.</p>
+                  </div>
+                )}
+
                 {/* Match Score */}
-                {app.matchScore && (
+                {app.matchScore && app.status !== 'rejected' && (
                   <div className="mb-3 flex items-center gap-2">
                     <span className="text-sm font-semibold">Resume Match:</span>
                     <div className="flex-1 bg-gray-200 rounded-full h-2 max-w-xs">
@@ -163,8 +174,8 @@ export default function EmployeeDashboard() {
                   </div>
                 )}
 
-                {/* Interview Section */}
-                {interviews[app._id] && interviews[app._id].length > 0 && (
+                {/* Interview Section - Hide if rejected */}
+                {app.status !== 'rejected' && interviews[app._id] && interviews[app._id].length > 0 && (
                   <div className="bg-green-50 p-3 rounded mb-3 border border-green-200">
                     <p className="font-semibold text-green-900 mb-2">📅 Interview Scheduled</p>
                     {interviews[app._id].map((interview, idx) => (
@@ -238,8 +249,8 @@ export default function EmployeeDashboard() {
                   </button>
                 )}
 
-                {/* Test Section - support multiple assigned tests */}
-                {((app.testId) || (app.testIds && app.testIds.length > 0)) && (
+                {/* Test Section - support multiple assigned tests - Hide if rejected */}
+                {app.status !== 'rejected' && ((app.testId) || (app.testIds && app.testIds.length > 0)) && (
                   <div className="bg-blue-50 p-3 rounded mb-3 border border-blue-200">
                     <p className="font-semibold text-blue-900 mb-2">Assigned Tests</p>
                     <div className="space-y-2">
